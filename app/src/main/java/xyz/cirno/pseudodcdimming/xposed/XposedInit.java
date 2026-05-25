@@ -94,6 +94,8 @@ public class XposedInit implements IXposedHookLoadPackage {
                     if (param.hasThrowable()) {
                         return;
                     }
+                    // param.args[3] = StaticDisplayInfo, param.args[6] = isDefaultDisplay
+                    if (!isInternalDisplay(param.args[3], (boolean)param.args[6])) return;
                     final var displayDeviceConfig = new DisplayDeviceConfigProxy(XposedHelpers.callMethod(param.thisObject,"getDisplayDeviceConfig"));
                     overrideService.lateInitialize(displayDeviceConfig);
                 }
@@ -224,5 +226,14 @@ public class XposedInit implements IXposedHookLoadPackage {
                     }
                 }
             });
+    }
+
+    private static boolean isInternalDisplay(Object staticInfo, boolean isDefaultDisplay) {
+        if (staticInfo == null) return isDefaultDisplay;
+        try {
+            return XposedHelpers.getBooleanField(staticInfo, "isInternal");
+        } catch (Throwable t) {
+            return isDefaultDisplay;
+        }
     }
 }

@@ -224,8 +224,14 @@ public class BacklightOverrideService {
             if (request.backlightLevel < minOverrideBacklight) {
                 overrideBacklight = minOverrideBacklight;
                 overrideNits = minOverrideNits;
-                gain = (request.backlightNits / minOverrideNits);
-                gain = Math.max(gain, deviceMinimumBacklightNits / minOverrideNits);
+                if (isValidNits(request.backlightNits) && isValidNits(minOverrideNits)) {
+                    gain = (request.backlightNits / minOverrideNits);
+                    if (isValidNits(deviceMinimumBacklightNits)) {
+                        gain = Math.max(gain, deviceMinimumBacklightNits / minOverrideNits);
+                    }
+                } else if (minOverrideBacklight > 0.0f) {
+                    gain = request.backlightLevel / minOverrideBacklight;
+                }
                 //gain = Math.max(gain, overrideService.minimumGain);
                 //gain = Math.max(gain, 0.05f);
             }
@@ -245,6 +251,10 @@ public class BacklightOverrideService {
         var result = new BacklightOverrideState(override, gain, pref);
         setLastBacklightOverride(result);
         return result;
+    }
+
+    private static boolean isValidNits(float value) {
+        return Float.isFinite(value) && value > 0.0f;
     }
 
     public void setTransformGain(float gain) {
