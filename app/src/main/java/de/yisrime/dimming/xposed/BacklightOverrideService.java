@@ -6,6 +6,7 @@ import android.os.RemoteException;
 import android.util.Log;
 
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -30,7 +31,8 @@ public class BacklightOverrideService {
     private volatile BacklightOverridePreferenceLocal preference = BacklightOverridePreferenceLocal.DEFAULT;
     public float deviceMinimumBacklightNits = Float.NaN;
     public BacklightAdapterProxy backlightAdapter;
-    public DisplayDeviceConfigProxy displayDeviceConfig;
+    public volatile DisplayDeviceConfigProxy displayDeviceConfig;
+    private volatile boolean initialized = false;
     private ExecutorService callbackExecutor;
     private final List<IBacklightOverrideStateListener> callbacks = new ArrayList<>();
     private DisplayTransformManagerProxy dtm;
@@ -40,13 +42,17 @@ public class BacklightOverrideService {
         systemServerClassLoader = classLoader;
         this.preferences = preferences;
         gainLayer = resolveGainLayer(classLoader);
+        callbackExecutor = Executors.newSingleThreadExecutor();
     }
 
     public void lateInitialize(DisplayDeviceConfigProxy deviceConfig) {
-        callbackExecutor = Executors.newSingleThreadExecutor();
+        if (initialized) return;
+        initialized = true;
         displayDeviceConfig = deviceConfig;
-        deviceMinimumBacklightNits = deviceConfig.getNitsFromBacklight(0.0f);
-        Log.d(TAG, String.format(Locale.ROOT, "deviceMinimumBacklightNits = %f", deviceMinimumBacklightNits));
+        if (deviceConfig != null) {
+            deviceMinimumBacklightNits = deviceConfig.getNitsFromBacklight(0.0f);
+            Log.d(TAG, String.format(Locale.ROOT, "deviceMinimumBacklightNits = %f", deviceMinimumBacklightNits));
+        }
         setPreference(readPersistentPreference());
     }
 
@@ -64,6 +70,11 @@ public class BacklightOverrideService {
             pref.duplicateApplicationWorkaround = false;
         }
         return pref;
+    }
+
+    public void recordBacklightArgs(Object adapter, Method method, Object[] args) {
+        final var proxy = backlightAdapter;
+        if (proxy != null) proxy.record(adapter, method, args);
     }
 
     public DisplayTransformManagerProxy getTransformManager() {

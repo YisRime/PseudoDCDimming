@@ -15,7 +15,7 @@ public class SurfaceControlCompat {
                     return SurfaceControlHidden34.getStaticDisplayInfo(physicalDisplayId);
                 }
             }
-            throw new RuntimeException("Display token not found: " + displayToken);
+            return null;
         } else {
             return SurfaceControlHiddenUpto33.getStaticDisplayInfo(displayToken);
         }

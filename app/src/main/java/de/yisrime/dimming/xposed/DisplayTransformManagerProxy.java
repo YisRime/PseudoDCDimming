@@ -21,7 +21,7 @@ public class DisplayTransformManagerProxy {
         } catch (Exception ignored) {}
     }
     public boolean needsLinearColorMatrix() {
-        if (setColorMatrixMethod == null) return true;
+        if (needsLinearColorMatrixMethod == null) return true;
         try {
             return (boolean)needsLinearColorMatrixMethod.invoke(obj);
         } catch (Exception e) {
