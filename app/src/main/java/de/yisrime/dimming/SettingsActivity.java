@@ -1,6 +1,5 @@
-package xyz.cirno.pseudodcdimming;
+package de.yisrime.dimming;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -43,17 +42,12 @@ public class SettingsActivity extends Activity {
     private long lastUpdatedNotificationTime = 0;
 
     @Override
-    @SuppressLint("WorldReadableFiles")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.settings_activity);
 
         service = ServiceDiscovery.getService();
-        try {
-            xsp = getSharedPreferences("config", MODE_WORLD_READABLE);
-        } catch (SecurityException e) {
-            Log.e(TAG, "failed to get shared preferences", e);
-        }
+        xsp = App.remotePreferences;
         fragment = new SettingsFragment();
         getFragmentManager()
                 .beginTransaction()
@@ -69,7 +63,7 @@ public class SettingsActivity extends Activity {
             }
         };
         checkErrors();
-        syncXSharedPreferences();
+        syncPersistentPreference();
     }
 
     private void checkErrors() {
@@ -101,7 +95,7 @@ public class SettingsActivity extends Activity {
         findViewById(R.id.errorBanner).setVisibility(android.view.View.VISIBLE);
     }
 
-    private void syncXSharedPreferences() {
+    private void syncPersistentPreference() {
         if (service == null || xsp == null) return;
         BacklightOverridePreference pref;
         try {
@@ -114,11 +108,11 @@ public class SettingsActivity extends Activity {
         dirty = dirty || xsp.getBoolean("gain_applied_twice", false) != pref.duplicateApplicationWorkaround;
 
         if (dirty) {
-            writeXSharedPreferences(pref);
+            writePersistentPreference(pref);
         }
     }
 
-    private void writeXSharedPreferences(BacklightOverridePreference pref) {
+    private void writePersistentPreference(BacklightOverridePreference pref) {
         if (xsp == null) return;
         xsp.edit()
                 .putBoolean("enabled", pref.enabled)
@@ -134,6 +128,9 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        xsp = App.remotePreferences;
+        checkErrors();
+        syncPersistentPreference();
         if (service != null) {
             try {
                 service.registerBacklightOverrideStateListener(listener);
@@ -183,7 +180,7 @@ public class SettingsActivity extends Activity {
                         final var pref = service.getPreference();
                         pref.enabled = (Boolean) v;
                         service.putPreference(pref);
-                        activity.writeXSharedPreferences(pref);
+                        activity.writePersistentPreference(pref);
                         return true;
                     } catch (RemoteException e) {
                         return false;
@@ -202,7 +199,7 @@ public class SettingsActivity extends Activity {
                         pref.minimumOverrideBacklightLevel = fvalue;
                         service.putPreference(pref);
                         updateMinimumBrightnessPreference(fvalue);
-                        activity.writeXSharedPreferences(pref);
+                        activity.writePersistentPreference(pref);
                         return true;
                     } catch (Exception e) {
                         return false;
@@ -217,7 +214,7 @@ public class SettingsActivity extends Activity {
                         final var pref = service.getPreference();
                         pref.duplicateApplicationWorkaround = (Boolean) v;
                         service.putPreference(pref);
-                        activity.writeXSharedPreferences(pref);
+                        activity.writePersistentPreference(pref);
                         return true;
                     } catch (Exception e) {
                         return false;

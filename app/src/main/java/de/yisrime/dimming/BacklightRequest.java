@@ -1,4 +1,4 @@
-package xyz.cirno.pseudodcdimming;
+package de.yisrime.dimming;
 
 import android.os.Parcel;
 import android.os.Parcelable;

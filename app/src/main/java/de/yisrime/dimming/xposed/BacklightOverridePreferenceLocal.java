@@ -1,4 +1,4 @@
-package xyz.cirno.pseudodcdimming.xposed;
+package de.yisrime.dimming.xposed;
 
 import net.jcip.annotations.Immutable;
 

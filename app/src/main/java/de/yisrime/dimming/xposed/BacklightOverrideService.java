@@ -1,6 +1,7 @@
-package xyz.cirno.pseudodcdimming.xposed;
+package de.yisrime.dimming.xposed;
 
 import android.annotation.SuppressLint;
+import android.content.SharedPreferences;
 import android.os.RemoteException;
 import android.util.Log;
 
@@ -12,19 +13,17 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import de.robv.android.xposed.XSharedPreferences;
-import de.robv.android.xposed.XposedHelpers;
-import xyz.cirno.pseudodcdimming.BacklightOverridePreference;
-import xyz.cirno.pseudodcdimming.BacklightRequest;
-import xyz.cirno.pseudodcdimming.BuildConfig;
-import xyz.cirno.pseudodcdimming.IBacklightOverrideService;
-import xyz.cirno.pseudodcdimming.IBacklightOverrideStateListener;
-import xyz.cirno.pseudodcdimming.util.PerceptualQuantizer;
+import de.yisrime.dimming.BacklightOverridePreference;
+import de.yisrime.dimming.BacklightRequest;
+import de.yisrime.dimming.IBacklightOverrideService;
+import de.yisrime.dimming.IBacklightOverrideStateListener;
+import de.yisrime.dimming.util.PerceptualQuantizer;
 
 
 public class BacklightOverrideService {
     private static final String TAG = "BacklightOverrideService";
     private final ClassLoader systemServerClassLoader;
+    private final SharedPreferences preferences;
     public final IBacklightOverrideService binderService = new BinderService();
     private volatile BacklightRequest lastBacklightRequest = BacklightRequest.INVALID;
     private volatile BacklightOverrideState lastBacklightOverride = BacklightOverrideState.INVALID;
@@ -37,8 +36,9 @@ public class BacklightOverrideService {
     private DisplayTransformManagerProxy dtm;
     private final int gainLayer;
 
-    public BacklightOverrideService(ClassLoader classLoader) {
+    public BacklightOverrideService(ClassLoader classLoader, SharedPreferences preferences) {
         systemServerClassLoader = classLoader;
+        this.preferences = preferences;
         gainLayer = resolveGainLayer(classLoader);
     }
 
@@ -53,10 +53,9 @@ public class BacklightOverrideService {
     private BacklightOverridePreference readPersistentPreference() {
         var pref = new BacklightOverridePreference();
         try {
-            var xsp = new XSharedPreferences(BuildConfig.APPLICATION_ID, "config");
-            pref.enabled = xsp.getBoolean("enabled", false);
-            pref.minimumOverrideBacklightLevel = xsp.getFloat("minimum_brightness", 0.0f);
-            pref.duplicateApplicationWorkaround = xsp.getBoolean("gain_applied_twice", false);
+            pref.enabled = preferences.getBoolean("enabled", false);
+            pref.minimumOverrideBacklightLevel = preferences.getFloat("minimum_brightness", 0.0f);
+            pref.duplicateApplicationWorkaround = preferences.getBoolean("gain_applied_twice", false);
         } catch (Exception e) {
             Log.e(TAG, "failed to read persistent preference", e);
             pref.enabled = false;
@@ -69,9 +68,9 @@ public class BacklightOverrideService {
     public DisplayTransformManagerProxy getTransformManager() {
         if (dtm == null) {
             try {
-                var localServiceClass = XposedHelpers.findClass("com.android.server.LocalServices", systemServerClassLoader);
-                var displayTransformManagerClass = XposedHelpers.findClass("com.android.server.display.color.DisplayTransformManager", systemServerClassLoader);
-                var dtmobj = XposedHelpers.callStaticMethod(localServiceClass, "getService", displayTransformManagerClass);
+                var localServiceClass = Compat.findClass("com.android.server.LocalServices", systemServerClassLoader);
+                var displayTransformManagerClass = Compat.findClass("com.android.server.display.color.DisplayTransformManager", systemServerClassLoader);
+                var dtmobj = Compat.callStatic(localServiceClass, "getService", displayTransformManagerClass);
                 dtm = new DisplayTransformManagerProxy(dtmobj);
             } catch (Exception e) {
                 Log.e(TAG, "failed to obtain DisplayTransformManager", e);

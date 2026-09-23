@@ -1,4 +1,4 @@
-package xyz.cirno.pseudodcdimming;
+package de.yisrime.dimming;
 
 import android.content.Context;
 import android.os.IBinder;
@@ -8,6 +8,7 @@ import android.util.Log;
 
 public class ServiceDiscovery {
     public static final int TRANSACTION_SERVICE_DISCOVERY = 0x67000000 | 114514;
+    public static final String PREFERENCE_GROUP = "config";
     private static boolean _isVersionMismatch = false;
     private static IBinder displayManager;
 

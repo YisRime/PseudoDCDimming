@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace 'xyz.cirno.pseudodcbacklight.hiddenapi'
+    namespace 'de.yisrime.dimming.hiddenapi'
 
     compileSdk 32
 

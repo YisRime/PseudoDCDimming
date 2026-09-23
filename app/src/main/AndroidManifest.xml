@@ -3,10 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <application
+        android:name=".App"
+        android:description="@string/xposed_description"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        >
+        tools:targetApi="s">
         <activity
             android:name=".SettingsActivity"
             android:exported="true"
@@ -15,21 +17,10 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
             </intent-filter>
         </activity>
 
-        <meta-data
-            android:name="xposedmodule"
-            android:value="true" />
-        <meta-data
-            android:name="xposeddescription"
-            android:value="@string/xposed_description" />
-        <meta-data
-            android:name="xposedminversion"
-            android:value="93" />
-        <meta-data
-            android:name="xposedscope"
-            android:resource="@array/xposed_scope" />
     </application>
 
 </manifest>

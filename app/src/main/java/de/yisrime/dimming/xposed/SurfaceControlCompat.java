@@ -1,4 +1,4 @@
-package xyz.cirno.pseudodcdimming.xposed;
+package de.yisrime.dimming.xposed;
 
 import android.os.Build;
 import android.os.IBinder;

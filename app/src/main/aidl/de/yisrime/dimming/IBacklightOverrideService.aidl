@@ -1,8 +1,8 @@
 // IBacklightOverrideService.aidl
-package xyz.cirno.pseudodcdimming;
+package de.yisrime.dimming;
 
-import xyz.cirno.pseudodcdimming.IBacklightOverrideStateListener;
-import xyz.cirno.pseudodcdimming.BacklightOverridePreference;
+import de.yisrime.dimming.IBacklightOverrideStateListener;
+import de.yisrime.dimming.BacklightOverridePreference;
 
 interface IBacklightOverrideService {
     const int VERSION = 3;

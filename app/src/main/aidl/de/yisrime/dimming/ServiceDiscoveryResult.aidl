@@ -1,7 +1,7 @@
 // ServiceDiscoveryResult.aidl
-package xyz.cirno.pseudodcdimming;
+package de.yisrime.dimming;
 
-import xyz.cirno.pseudodcdimming.IBacklightOverrideService;
+import de.yisrime.dimming.IBacklightOverrideService;
 // Declare any non-default types here with import statements
 
 parcelable ServiceDiscoveryResult {

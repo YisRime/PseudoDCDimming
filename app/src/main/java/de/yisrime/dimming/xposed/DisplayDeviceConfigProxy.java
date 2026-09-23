@@ -1,8 +1,6 @@
-package xyz.cirno.pseudodcdimming.xposed;
+package de.yisrime.dimming.xposed;
 
 import java.lang.reflect.Method;
-
-import de.robv.android.xposed.XposedHelpers;
 
 public class DisplayDeviceConfigProxy {
     private final Object obj;
@@ -10,7 +8,7 @@ public class DisplayDeviceConfigProxy {
 
     public DisplayDeviceConfigProxy(Object obj) {
         this.obj = obj;
-        getNitsFromBacklightMethod = XposedHelpers.findMethodExact(obj.getClass(), "getNitsFromBacklight", float.class);
+        getNitsFromBacklightMethod = Compat.findMethod(obj.getClass(), "getNitsFromBacklight", float.class);
     }
 
     float getNitsFromBacklight(float backlight) {

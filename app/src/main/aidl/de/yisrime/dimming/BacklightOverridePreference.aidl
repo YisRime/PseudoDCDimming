@@ -1,5 +1,5 @@
 // BacklightOverridePreference.aidl
-package xyz.cirno.pseudodcdimming;
+package de.yisrime.dimming;
 
 // Declare any non-default types here with import statements
 
