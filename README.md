@@ -26,7 +26,7 @@ Use the high-speed shutter mode of the camera to amplify the stroboscopic effect
 
 ## Version and authors
 
-- Version: 2.0 (versionCode 8), package name `de.yisrime.dimming`
+- Version: 1.0.0 (versionCode 100), package name `de.yisrime.dimming`
 - Original project and author: [dantmnf/PseudoDCDimming](https://github.com/dantmnf/PseudoDCDimming)
 - libxposed adaptation and maintenance: [Yis_Rime](https://github.com/YisRime)
 
