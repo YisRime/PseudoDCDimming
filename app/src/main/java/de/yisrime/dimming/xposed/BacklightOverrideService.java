@@ -54,7 +54,8 @@ public class BacklightOverrideService {
         var pref = new BacklightOverridePreference();
         try {
             pref.enabled = preferences.getBoolean("enabled", false);
-            pref.minimumOverrideBacklightLevel = preferences.getFloat("minimum_brightness", 0.0f);
+            var level = preferences.getFloat("minimum_brightness", 0.0f);
+            pref.minimumOverrideBacklightLevel = level >= 0.0f && level <= 1.0f ? level : 0.0f;
             pref.duplicateApplicationWorkaround = preferences.getBoolean("gain_applied_twice", false);
         } catch (Exception e) {
             Log.e(TAG, "failed to read persistent preference", e);
@@ -142,9 +143,8 @@ public class BacklightOverrideService {
     }
 
     private boolean validatePreference(BacklightOverridePreference pref) {
-        if (pref.minimumOverrideBacklightLevel < 0.0f || pref.minimumOverrideBacklightLevel > 1.0f)
-            return false;
-        return true;
+        var level = pref.minimumOverrideBacklightLevel;
+        return level >= 0.0f && level <= 1.0f;
     }
 
     private void setPreference(BacklightOverridePreference pref) {
@@ -257,6 +257,7 @@ public class BacklightOverrideService {
     }
 
     public void setTransformGain(float gain) {
+        if (!Float.isFinite(gain) || gain < 0.0f) return;
         if (getPreference().duplicateApplicationWorkaround) {
             gain = (float)Math.sqrt(gain);
         }

@@ -182,7 +182,7 @@ public class SettingsActivity extends Activity {
                         service.putPreference(pref);
                         activity.writePersistentPreference(pref);
                         return true;
-                    } catch (RemoteException e) {
+                    } catch (Exception e) {
                         return false;
                     }
                 });
@@ -194,7 +194,7 @@ public class SettingsActivity extends Activity {
                 minimumBrightnessPref.setOnPreferenceChangeListener((p, v) -> {
                     try {
                         final var fvalue = Float.parseFloat((String) v) / 100.0f;
-                        if (fvalue > 1.0f || fvalue < 0.0f) return false;
+                        if (!(fvalue >= 0.0f && fvalue <= 1.0f)) return false;
                         final var pref = service.getPreference();
                         pref.minimumOverrideBacklightLevel = fvalue;
                         service.putPreference(pref);
@@ -253,9 +253,21 @@ public class SettingsActivity extends Activity {
         }
 
         public void updateStatus(BacklightRequest request, BacklightRequest effective, float gain) {
-            requestBacklightPref.setSummary(String.format(Locale.ROOT, "%.2f%% (%.2f cd/m²)", request.backlightLevel * 100, request.backlightNits));
-            overrideBacklightPref.setSummary(String.format(Locale.ROOT, "%.2f%% (%.2f cd/m²)", effective.backlightLevel * 100, effective.backlightNits));
-            gainPref.setSummary(String.format(Locale.ROOT, "%.5f", gain));
+            requestBacklightPref.setSummary(formatBrightness(request));
+            overrideBacklightPref.setSummary(formatBrightness(effective));
+            gainPref.setSummary(Float.isFinite(gain)
+                    ? String.format(Locale.ROOT, "%.5f", gain)
+                    : getString(R.string.loading_summary));
+        }
+
+        private String formatBrightness(BacklightRequest request) {
+            if (!Float.isFinite(request.backlightLevel)) return getString(R.string.loading_summary);
+            var level = request.backlightLevel >= 0.0f && request.backlightLevel <= 1.0f
+                    ? String.format(Locale.ROOT, "%.2f%%", request.backlightLevel * 100)
+                    : String.format(Locale.ROOT, "%.2f", request.backlightLevel);
+            return Float.isFinite(request.backlightNits)
+                    ? String.format(Locale.ROOT, "%s (%.2f cd/m²)", level, request.backlightNits)
+                    : level;
         }
 
         private void updateMinimumBrightnessPreference(float newValue) {

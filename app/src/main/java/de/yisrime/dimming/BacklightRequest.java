@@ -47,7 +47,7 @@ public final class BacklightRequest implements Parcelable {
             } finally {
                 in.setDataPosition(pos0 + size);
             }
-            return new BacklightRequest(_backlightLevel, _backlightNits, _sdrBacklightLevel, _sdrBacklightNits);
+            return new BacklightRequest(_sdrBacklightLevel, _sdrBacklightNits, _backlightLevel, _backlightNits);
         }
 
         @Override
