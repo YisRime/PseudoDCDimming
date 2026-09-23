@@ -43,17 +43,17 @@ public class App extends Application {
         var migrated = false;
         for (var legacy : List.of(direct.getSharedPreferences(name, MODE_PRIVATE),
                 getSharedPreferences(name, MODE_PRIVATE))) {
-            var all = legacy.getAll();
-            if (all.isEmpty()) continue;
-            for (var entry : all.entrySet()) {
+            for (var entry : legacy.getAll().entrySet()) {
                 var key = entry.getKey();
                 var value = entry.getValue();
                 if (value instanceof Boolean) editor.putBoolean(key, (Boolean) value);
                 else if (value instanceof Float) editor.putFloat(key, (Float) value);
+                else continue;
+                migrated = true;
             }
-            migrated = true;
         }
-        if (migrated) editor.apply();
+        if (!migrated) return;
+        editor.apply();
         direct.deleteSharedPreferences(name);
         deleteSharedPreferences(name);
     }

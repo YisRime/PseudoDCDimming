@@ -3,9 +3,9 @@ package de.yisrime.dimming;
 import android.os.Handler;
 
 public final class HandlerTimer {
-    private Handler handler;
-    private Runnable callback;
-    private long intervalMillis;
+    private final Handler handler;
+    private final Runnable callback;
+    private final long intervalMillis;
 
     private Runnable wrapper;
 
@@ -29,13 +29,5 @@ public final class HandlerTimer {
 
     public void stop() {
         handler.removeCallbacks(wrapper);
-    }
-
-    public void setIntervalMillis(long interval) {
-        this.intervalMillis = interval;
-    }
-
-    public long getIntervalMillis() {
-        return intervalMillis;
     }
 }

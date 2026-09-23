@@ -8,7 +8,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
-import android.os.SystemClock;
 import android.preference.CheckBoxPreference;
 import android.preference.EditTextPreference;
 import android.preference.Preference;
@@ -37,9 +36,7 @@ public class SettingsActivity extends Activity {
     private BacklightRequest requestBacklight;
     private BacklightRequest overrideBacklight;
     private float gain;
-
-    private long lastNotificationTime = 0;
-    private long lastUpdatedNotificationTime = 0;
+    private volatile boolean statusPending = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,10 +53,10 @@ public class SettingsActivity extends Activity {
         listener = new IBacklightOverrideStateListener.Stub() {
             @Override
             public void onBacklightUpdated(BacklightRequest request, BacklightRequest override, float gain) throws RemoteException {
-                lastNotificationTime = SystemClock.uptimeMillis();
                 requestBacklight = request;
                 overrideBacklight = override;
                 SettingsActivity.this.gain = gain;
+                statusPending = true;
             }
         };
         checkErrors();
@@ -121,9 +118,9 @@ public class SettingsActivity extends Activity {
                 .apply();
     }
     private void updateStatus() {
-        if (lastUpdatedNotificationTime == lastNotificationTime) return;
+        if (!statusPending) return;
+        statusPending = false;
         fragment.updateStatus(requestBacklight, overrideBacklight, gain);
-        lastUpdatedNotificationTime = lastNotificationTime;
     }
     @Override
     protected void onResume() {
