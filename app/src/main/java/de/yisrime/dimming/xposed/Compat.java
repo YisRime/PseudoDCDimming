@@ -17,7 +17,7 @@ final class Compat {
 
     static Class<?> findClass(String name, ClassLoader loader) {
         try {
-            return Class.forName(name, false, loader);
+            return Class.forName(name, true, loader);
         } catch (ClassNotFoundException e) {
             throw new NoClassDefFoundError(name);
         }
