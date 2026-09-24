@@ -24,7 +24,7 @@
 
 ## 版本与作者
 
-- 版本：1.0.1（versionCode 101），包名 `de.yisrime.dimming`
+- 版本：1.1.0（versionCode 110），包名 `de.yisrime.dimming`
 - 原项目与作者：[dantmnf/PseudoDCDimming](https://github.com/dantmnf/PseudoDCDimming)
 - libxposed 适配与维护：[Yis_Rime](https://github.com/YisRime)
 

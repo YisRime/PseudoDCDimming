@@ -16,8 +16,8 @@ android {
         applicationId "de.yisrime.dimming"
         minSdk 31
         targetSdk 33
-        versionCode 101
-        versionName "1.0.1"
+        versionCode 110
+        versionName "1.1.0"
 
     }
     applicationVariants.all { variant ->
