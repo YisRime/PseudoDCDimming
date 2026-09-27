@@ -12,6 +12,17 @@ import io.github.libxposed.service.XposedServiceHelper;
 public class App extends Application {
     private static final String TAG = "PseudoDcBacklight.App";
     public static volatile SharedPreferences remotePreferences = null;
+    private static volatile Runnable stateListener;
+
+    /* 送达回调 */
+    public static void setStateListener(Runnable listener) {
+        stateListener = listener;
+    }
+
+    private static void notifyState() {
+        var listener = stateListener;
+        if (listener != null) listener.run();
+    }
 
     @Override
     public void onCreate() {
@@ -25,12 +36,15 @@ public class App extends Application {
                     remotePreferences = preferences;
                 } catch (RuntimeException e) {
                     Log.e(TAG, "failed to get remote preferences", e);
+                    remotePreferences = null;
                 }
+                notifyState();
             }
 
             @Override
             public void onServiceDied(XposedService service) {
                 remotePreferences = null;
+                notifyState();
             }
         });
     }

@@ -7,6 +7,9 @@
     <string name="settings_header">Settings</string>
     <string name="enable_title">Enable</string>
     <string name="minimum_brightness_title">Minimum HAL brightness</string>
+    <string name="minimum_gain_title">Minimum software brightness</string>
+    <string name="minimum_gain_summary">The gain the display signal converges to at the bottom of the slider; the reduction ramps in linearly below the minimum hardware brightness. Range: 0% to 100%. Raise it if the screen turns completely black.</string>
+    <string name="minimum_gain_invalid">Minimum software brightness must be between 0% and 100%.</string>
     <string name="status_header">Status</string>
     <string name="target_brightness_title">Target brightness</string>
     <string name="hal_brightness_title">HAL brightness</string>

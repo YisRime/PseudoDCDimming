@@ -9,6 +9,8 @@ import android.util.Log;
 public class ServiceDiscovery {
     public static final int TRANSACTION_SERVICE_DISCOVERY = 0x67000000 | 114514;
     public static final String PREFERENCE_GROUP = "config";
+    public static final String KEY_MINIMUM_GAIN = "minimum_gain";
+    public static final float DEFAULT_MINIMUM_GAIN = 0.05f;
     private static boolean _isVersionMismatch = false;
     private static IBinder displayManager;
 

@@ -7,6 +7,9 @@
     <string name="settings_header">设置</string>
     <string name="enable_title">启用</string>
     <string name="minimum_brightness_title">最低硬件亮度</string>
+    <string name="minimum_gain_title">最低软件亮度</string>
+    <string name="minimum_gain_summary">滑条拉至最底时显示信号所对应的增益，削弱量自最低硬件亮度起线性渐入。取值范围 0% 至 100%。若屏幕全黑，请上调此值。</string>
+    <string name="minimum_gain_invalid">最低软件亮度须介于 0% 与 100% 之间。</string>
     <string name="status_header">状态</string>
     <string name="target_brightness_title">目标亮度</string>
     <string name="hal_brightness_title">硬件亮度</string>

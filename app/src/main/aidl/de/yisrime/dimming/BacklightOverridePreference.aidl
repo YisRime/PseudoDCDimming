@@ -6,5 +6,6 @@ package de.yisrime.dimming;
 parcelable BacklightOverridePreference {
     boolean enabled;
     float minimumOverrideBacklightLevel;
+    float minimumGain;
     boolean duplicateApplicationWorkaround;
 }

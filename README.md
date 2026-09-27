@@ -19,10 +19,13 @@ By limiting the minimum brightness and scaling down the output signal through a 
 * Rely heavily on the manufacturer's calibration of screen brightness controls and response curves. If the manufacturer uses different response curves during calibration, or the brightness control has non-linear behavior, it may affect the display quality after turning on the module;
 * May conflict with other color transform functions;
 * May conflict with HDR content.
+* Deep reduction leaves fewer code words for the panel, so the bottom of the slider may band or shift colour on some displays.
 
 ## Configuration
 
 Use the high-speed shutter mode of the camera to amplify the stroboscopic effect, or use professional instruments to measure the PWM frequency and duty cycle. Choose an acceptable brightness value as the minimum hardware brightness.
+
+Below that value the panel is held at the minimum hardware brightness and the display signal is reduced instead, so the result can go darker than the lowest level the panel produces on its own. How far below is set by the minimum software brightness, which is the gain the signal converges to at the bottom of the slider; the reduction ramps in linearly between the minimum hardware brightness and that end. At 100% the perceived brightness stays exactly as requested and only the panel operating point moves; lowering it lets the slider reach below the hardware minimum, down to black at 0%. The duplicated gain workaround is for devices that apply the colour transform twice.
 
 ## Version and authors
 

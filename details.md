@@ -13,3 +13,7 @@ The relationship between signal level and output brightness is not linear, so th
 2. Based on the sRGB response curve, the system framework and HAL provide RGB matrix transformation in linear space;
 3. Starting from Android 12, the system framework and HAL interface support absolute brightness control in cd/m<sup>2</sup> (or nits).
 
+The framework hands the display adapter a matched pair: a backlight level and the absolute luminance that level is expected to produce. This module raises both together. Writing a higher level while leaving the original luminance in place would let the absolute-brightness path look the requested nits up again and discard the raised level, so the pair has to stay self-consistent.
+
+On some devices the framework's own luminance table is empty and the lookup only ever returns the "not applicable" sentinel. The module therefore learns the level-to-luminance curve from the requests it intercepts: every pair the framework itself produces is a sample, kept in a monotone table and interpolated with the power law through its neighbours, using a bounded exponent where the requested level is above everything observed so far. Until at least two samples exist the module stays out of the way rather than guessing, and the table is rebuilt after each framework restart.
+

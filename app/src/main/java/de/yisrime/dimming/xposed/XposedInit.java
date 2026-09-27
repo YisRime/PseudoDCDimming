@@ -11,6 +11,7 @@ import android.util.Log;
 
 import java.util.Locale;
 
+import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
 import de.yisrime.dimming.BacklightRequest;
@@ -34,43 +35,75 @@ public class XposedInit extends XposedModule {
             return;
         }
 
+        Log.i(TAG, String.format(Locale.ROOT, "framework=%s %s (api %d, sdk %d)", getFrameworkName(),
+                getFrameworkVersion(), getApiVersion(), Build.VERSION.SDK_INT));
+
         if (Build.VERSION.SDK_INT >= 34) {
             DisplayControlProxy.initialize(classLoader);
         }
 
         final var overrideService = new BacklightOverrideService(classLoader, preferences);
 
-        final var localDisplayDevice = Compat.findClass("com.android.server.display.LocalDisplayAdapter$LocalDisplayDevice", classLoader);
+        install("displayDevice", () -> hookDisplayDevice(classLoader, overrideService));
+        install("backlightAdapter", () -> hookBacklightAdapterCtor(classLoader, overrideService));
+        install("setBacklight", () -> hookSetBacklight(classLoader, overrideService));
+        install("serviceDiscovery", () -> hookServiceDiscovery(classLoader, overrideService));
+    }
 
-        final var backlightAdapter = Compat.findClass("com.android.server.display.LocalDisplayAdapter$BacklightAdapter", classLoader);
+    /* 逐步隔离 */
+    private static void install(String step, Runnable body) {
+        try {
+            body.run();
+        } catch (Throwable t) {
+            Log.e(TAG, "hook step " + step + " failed", t);
+        }
+    }
 
-        final var localDisplayAdapter = Compat.findClass("com.android.server.display.LocalDisplayAdapter", classLoader);
+    private void hookDisplayDevice(ClassLoader classLoader, BacklightOverrideService overrideService) {
+        final var deviceClass = Compat.findClass(
+                "com.android.server.display.LocalDisplayAdapter$LocalDisplayDevice", classLoader);
+        final var adapterClass = Compat.findClass(
+                "com.android.server.display.LocalDisplayAdapter", classLoader);
+        final var staticInfoClass = Compat.findClass(
+                "android.view.SurfaceControl$StaticDisplayInfo", classLoader);
+        final var dynamicInfoClass = Compat.findClass(
+                "android.view.SurfaceControl$DynamicDisplayInfo", classLoader);
+        final var modeSpecsClass = Compat.findClass(
+                "android.view.SurfaceControl$DesiredDisplayModeSpecs", classLoader);
 
-        hook(Compat.findConstructor(localDisplayDevice,
-            localDisplayAdapter,     // [surrounding this]
-            android.os.IBinder.class,     // displayToken
-            long.class,        // physicalDisplayId
-            Compat.findClass("android.view.SurfaceControl$StaticDisplayInfo", classLoader),
-            Compat.findClass("android.view.SurfaceControl$DynamicDisplayInfo", classLoader),
-            Compat.findClass("android.view.SurfaceControl$DesiredDisplayModeSpecs", classLoader),
-            boolean.class     // isDefaultDisplay
-        )).intercept(chain -> {
+        hook(Compat.findConstructorWith(deviceClass,
+                adapterClass,      // [surrounding this]
+                android.os.IBinder.class,     // displayToken
+                long.class,        // physicalDisplayId
+                staticInfoClass,
+                dynamicInfoClass,
+                modeSpecsClass
+        )).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
             chain.proceed();
-            // chain.getArg(3) = StaticDisplayInfo, chain.getArg(6) = isDefaultDisplay
-            if (!isInternalDisplay(chain.getArg(3), (boolean) chain.getArg(6))) return null;
+            final var args = chain.getArgs().toArray();
+            final var isDefault = Compat.argOfType(Boolean.class, args);
+            final var staticInfo = Compat.argOfType(staticInfoClass, args);
+            if (!isInternalDisplay(staticInfo, Boolean.TRUE.equals(isDefault))) return null;
             final var deviceConfig = Compat.call(chain.getThisObject(), "getDisplayDeviceConfig");
             overrideService.lateInitialize(deviceConfig == null
                     ? null
                     : new DisplayDeviceConfigProxy(deviceConfig));
             return null;
         });
-        hook(Compat.findConstructor(backlightAdapter,
+    }
+
+    private void hookBacklightAdapterCtor(ClassLoader classLoader, BacklightOverrideService overrideService) {
+        final var backlightAdapter = Compat.findClass(
+                "com.android.server.display.LocalDisplayAdapter$BacklightAdapter", classLoader);
+        hook(Compat.findConstructorWith(backlightAdapter,
                 android.os.IBinder.class,
                 boolean.class,
                 Compat.findClass("com.android.server.display.LocalDisplayAdapter$SurfaceControlProxy", classLoader)
-        )).intercept(chain -> {
+        )).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
             chain.proceed();
-            final var token = (android.os.IBinder) chain.getArg(0);
+            final var token = (android.os.IBinder) Compat.argOfType(android.os.IBinder.class,
+                    chain.getArgs().toArray());
+            if (token == null) return null;
             final var staticInfo = SurfaceControlCompat.getStaticDisplayInfo(token);
             if (staticInfo == null) return null;
             final var isInternal = staticInfo.isInternal;
@@ -80,74 +113,86 @@ public class XposedInit extends XposedModule {
             }
             return null;
         });
+    }
+
+    /* 全签挂接 */
+    private void hookSetBacklight(ClassLoader classLoader, BacklightOverrideService overrideService) {
+        final var backlightAdapter = Compat.findClass(
+                "com.android.server.display.LocalDisplayAdapter$BacklightAdapter", classLoader);
 
         int hooked = 0;
         for (var method : backlightAdapter.getDeclaredMethods()) {
             if (!method.getName().equals("setBacklight") || method.getParameterCount() < 4) continue;
             hooked++;
-            hook(method).intercept(chain -> {
-                // void setBacklight(float sdrBacklight, float sdrNits, float backlight, float nits, ...)
-                final var self = chain.getThisObject();
-                if (!Compat.isInternalDisplay(self)) return chain.proceed();
-                if (Boolean.TRUE.equals(insideSetBacklight.get())) return chain.proceed();
-                insideSetBacklight.set(Boolean.TRUE);
-                try {
+            hook(method)
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept(chain -> {
+                    // void setBacklight(float sdrBacklight, float sdrNits, float backlight, float nits, ...)
+                    final var self = chain.getThisObject();
+                    if (!Compat.isInternalDisplay(self)) return chain.proceed();
+                    if (Boolean.TRUE.equals(insideSetBacklight.get())) return chain.proceed();
                     final var args = chain.getArgs().toArray();
                     final var requestSdrBacklight = (float) args[0];
                     final var requestSdrNits = (float) args[1];
                     final var requestBacklight = (float) args[2];
                     final var requestNits = (float) args[3];
+                    // 关屏与哨兵值不参与换算
+                    if (!isDimmable(requestBacklight)) return chain.proceed();
+                    insideSetBacklight.set(Boolean.TRUE);
+                    try {
+                        var request = new BacklightRequest(requestSdrBacklight, requestSdrNits,
+                                requestBacklight, requestNits);
 
-                    var request = new BacklightRequest(requestSdrBacklight, requestSdrNits, requestBacklight, requestNits);
+                        var prevOverride = overrideService.getLastBacklightOverrideState();
+                        var overrideState = overrideService.getOverrideBacklightAndGain(request);
 
-                    var prevOverride = overrideService.getLastBacklightOverrideState();
-                    var overrideState = overrideService.getOverrideBacklightAndGain(request);
+                        var overrideBacklight = overrideState.overrideRequest;
+                        args[0] = overrideBacklight.sdrBacklightLevel;
+                        args[1] = overrideBacklight.sdrBacklightNits;
+                        args[2] = overrideBacklight.backlightLevel;
+                        args[3] = overrideBacklight.backlightNits;
+                        overrideService.recordBacklightArgs(self, method, args);
+                        Log.d(TAG, String.format(Locale.ROOT, "setBacklight(%f->%f, %f->%f, %f->%f, %f->%f)",
+                                requestSdrBacklight,
+                                overrideBacklight.sdrBacklightLevel,
+                                requestSdrNits,
+                                overrideBacklight.sdrBacklightNits,
+                                requestBacklight,
+                                overrideBacklight.backlightLevel,
+                                requestNits,
+                                overrideBacklight.backlightNits));
 
-                    var overrideBacklight = overrideState.overrideRequest;
-                    args[0] = overrideBacklight.sdrBacklightLevel;
-                    args[1] = overrideBacklight.sdrBacklightNits;
-                    args[2] = overrideBacklight.backlightLevel;
-                    args[3] = overrideBacklight.backlightNits;
-                    overrideService.recordBacklightArgs(self, method, args);
-                    Log.d(TAG, String.format(Locale.ROOT, "setBacklight(%f->%f, %f->%f, %f->%f, %f->%f)",
-                            requestSdrBacklight,
-                            overrideBacklight.sdrBacklightLevel,
-                            requestSdrNits,
-                            overrideBacklight.sdrBacklightNits,
-                            requestBacklight,
-                            overrideBacklight.backlightLevel,
-                            requestNits,
-                            overrideBacklight.backlightNits));
+                        float setGainAfterBrightness;
+                        if (overrideBacklight.backlightLevel > prevOverride.overrideRequest.backlightLevel) {
+                            // increased hardware brightness:
+                            // set gain -> darker
+                            // set brightness -> brighter
+                            setGainAfterBrightness = -1.0f;
+                            overrideService.setTransformGain(overrideState.gain);
+                        } else {
+                            // decreased hardware brightness:
+                            // set brightness -> darker
+                            // set gain -> brighter
+                            // a dark spike is more acceptable than a bright spike
+                            setGainAfterBrightness = overrideState.gain;
+                        }
 
-                    float setGainAfterBrightness;
-                    if (overrideBacklight.backlightLevel > prevOverride.overrideRequest.backlightLevel) {
-                        // increased hardware brightness:
-                        // set gain -> darker
-                        // set brightness -> brighter
-                        setGainAfterBrightness = -1.0f;
-                        overrideService.setTransformGain(overrideState.gain);
-                    } else {
-                        // decreased hardware brightness:
-                        // set brightness -> darker
-                        // set gain -> brighter
-                        // a dark spike is more acceptable than a bright spike
-                        setGainAfterBrightness = overrideState.gain;
+                        var result = chain.proceed(args);
+
+                        if (setGainAfterBrightness > 0.0f) {
+                            overrideService.setTransformGain(setGainAfterBrightness);
+                        }
+                        overrideService.notifyAllListeners();
+                        return result;
+                    } finally {
+                        insideSetBacklight.remove();
                     }
-
-                    var result = chain.proceed(args);
-
-                    if (setGainAfterBrightness > 0.0f) {
-                        overrideService.setTransformGain(setGainAfterBrightness);
-                    }
-                    overrideService.notifyAllListeners();
-                    return result;
-                } finally {
-                    insideSetBacklight.remove();
-                }
-            });
+                });
         }
         Log.i(TAG, String.format(Locale.ROOT, "hooked %d setBacklight overloads", hooked));
+    }
 
+    private void hookServiceDiscovery(ClassLoader classLoader, BacklightOverrideService overrideService) {
         final var binderServiceClass = Compat.findClass("com.android.server.display.DisplayManagerService$BinderService", classLoader);
         hook(Compat.findMethod(
             Compat.findClass("android.hardware.display.IDisplayManager$Stub", classLoader),
@@ -181,6 +226,10 @@ public class XposedInit extends XposedModule {
             response.writeToParcel(reply, Parcelable.PARCELABLE_WRITE_RETURN_VALUE);
             return true;
         });
+    }
+
+    private static boolean isDimmable(float backlight) {
+        return Float.isFinite(backlight) && backlight > 0.0f;
     }
 
     private static boolean isInternalDisplay(Object staticInfo, boolean isDefaultDisplay) {

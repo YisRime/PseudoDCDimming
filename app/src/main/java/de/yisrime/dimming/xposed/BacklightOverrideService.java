@@ -18,6 +18,7 @@ import de.yisrime.dimming.BacklightOverridePreference;
 import de.yisrime.dimming.BacklightRequest;
 import de.yisrime.dimming.IBacklightOverrideService;
 import de.yisrime.dimming.IBacklightOverrideStateListener;
+import de.yisrime.dimming.ServiceDiscovery;
 import de.yisrime.dimming.util.PerceptualQuantizer;
 
 
@@ -29,9 +30,9 @@ public class BacklightOverrideService {
     private volatile BacklightRequest lastBacklightRequest = BacklightRequest.INVALID;
     private volatile BacklightOverrideState lastBacklightOverride = BacklightOverrideState.INVALID;
     private volatile BacklightOverridePreferenceLocal preference = BacklightOverridePreferenceLocal.DEFAULT;
-    public float deviceMinimumBacklightNits = Float.NaN;
     public BacklightAdapterProxy backlightAdapter;
     public volatile DisplayDeviceConfigProxy displayDeviceConfig;
+    private final NitsCalibration calibration = new NitsCalibration();
     private volatile boolean initialized = false;
     private ExecutorService callbackExecutor;
     private final List<IBacklightOverrideStateListener> callbacks = new ArrayList<>();
@@ -49,10 +50,6 @@ public class BacklightOverrideService {
         if (initialized) return;
         initialized = true;
         displayDeviceConfig = deviceConfig;
-        if (deviceConfig != null) {
-            deviceMinimumBacklightNits = deviceConfig.getNitsFromBacklight(0.0f);
-            Log.d(TAG, String.format(Locale.ROOT, "deviceMinimumBacklightNits = %f", deviceMinimumBacklightNits));
-        }
         setPreference(readPersistentPreference());
     }
 
@@ -62,11 +59,15 @@ public class BacklightOverrideService {
             pref.enabled = preferences.getBoolean("enabled", false);
             var level = preferences.getFloat("minimum_brightness", 0.0f);
             pref.minimumOverrideBacklightLevel = level >= 0.0f && level <= 1.0f ? level : 0.0f;
+            var gain = preferences.getFloat(ServiceDiscovery.KEY_MINIMUM_GAIN, ServiceDiscovery.DEFAULT_MINIMUM_GAIN);
+            pref.minimumGain = Float.isFinite(gain) && gain >= 0.0f && gain <= 1.0f
+                    ? gain : ServiceDiscovery.DEFAULT_MINIMUM_GAIN;
             pref.duplicateApplicationWorkaround = preferences.getBoolean("gain_applied_twice", false);
         } catch (Exception e) {
             Log.e(TAG, "failed to read persistent preference", e);
             pref.enabled = false;
             pref.minimumOverrideBacklightLevel = 0.0f;
+            pref.minimumGain = ServiceDiscovery.DEFAULT_MINIMUM_GAIN;
             pref.duplicateApplicationWorkaround = false;
         }
         return pref;
@@ -107,13 +108,15 @@ public class BacklightOverrideService {
         final var lastOverrideState = getLastBacklightOverrideState();
         final var lastOverride = lastOverrideState.overrideRequest;
         final var pref = getPreference();
-        Log.d(TAG, String.format(Locale.ROOT, "enable=%s, backlightLevel=%f->%f, backlightNits=%f->%f, transformGain=%f",
+        Log.d(TAG, String.format(Locale.ROOT, "enable=%s, backlightLevel=%f->%f, backlightNits=%f->%f, transformGain=%f, cal=%d/%f",
                 pref.enabled,
                 lastRequest.backlightLevel,
                 lastOverride.backlightLevel,
                 lastRequest.backlightNits,
                 lastOverride.backlightNits,
-                lastOverrideState.gain));
+                lastOverrideState.gain,
+                calibration.sampleCount(),
+                calibration.topLevel()));
         callbackExecutor.execute(() -> {
             synchronized (callbacks) {
                 final var itr = callbacks.listIterator();
@@ -155,20 +158,22 @@ public class BacklightOverrideService {
 
     private boolean validatePreference(BacklightOverridePreference pref) {
         var level = pref.minimumOverrideBacklightLevel;
-        return level >= 0.0f && level <= 1.0f;
+        var gain = pref.minimumGain;
+        return level >= 0.0f && level <= 1.0f
+                && Float.isFinite(gain) && gain >= 0.0f && gain <= 1.0f;
     }
 
     private void setPreference(BacklightOverridePreference pref) {
-        if (!validatePreference(pref)) return;
-        float newMinimumNits = 2.0f;
-        if (displayDeviceConfig != null) {
-            newMinimumNits = displayDeviceConfig.getNitsFromBacklight(pref.minimumOverrideBacklightLevel);
+        if (!validatePreference(pref)) {
+            Log.w(TAG, "setPreference: rejected, out-of-range preference");
+            return;
         }
 
-        Log.d(TAG, String.format(Locale.ROOT, "setPreference: enabled=%s, minimumOverrideBacklightLevel=%f, minimumOverrideBacklightNits=%f",
-                pref.enabled, pref.minimumOverrideBacklightLevel, newMinimumNits));
+        Log.d(TAG, String.format(Locale.ROOT, "setPreference: enabled=%s, minimumOverrideBacklightLevel=%f, minimumGain=%f",
+                pref.enabled, pref.minimumOverrideBacklightLevel, pref.minimumGain));
 
-        preference = new BacklightOverridePreferenceLocal(pref.enabled, pref.minimumOverrideBacklightLevel, newMinimumNits, pref.duplicateApplicationWorkaround);
+        preference = new BacklightOverridePreferenceLocal(pref.enabled, pref.minimumOverrideBacklightLevel,
+                pref.minimumGain, pref.duplicateApplicationWorkaround);
 
         final var lastRequest = getLastBacklightRequest();
         // skip refresh if setBacklight is not called yet
@@ -197,6 +202,7 @@ public class BacklightOverrideService {
         var result = new BacklightOverridePreference();
         result.enabled = pref.enabled;
         result.minimumOverrideBacklightLevel = pref.minimumOverrideBacklightLevel;
+        result.minimumGain = pref.minimumGain;
         result.duplicateApplicationWorkaround = pref.duplicateApplicationWorkaround;
         return result;
     }
@@ -226,28 +232,32 @@ public class BacklightOverrideService {
 
         setLastBacklightRequest(request);
 
+        final var sdrMatchesHdr = isSdrEqualToHdr(request);
+        if (sdrMatchesHdr) {
+            calibration.observe(request.backlightLevel, request.backlightNits);
+        }
+
         var pref = getPreference();
 
         if (pref.enabled) {
             final var minOverrideBacklight = pref.minimumOverrideBacklightLevel;
-            final var minOverrideNits = pref.minimumOverrideBacklightNits;
             if (request.backlightLevel < minOverrideBacklight) {
-                overrideBacklight = minOverrideBacklight;
-                overrideNits = minOverrideNits;
-                if (isValidNits(request.backlightNits) && isValidNits(minOverrideNits)) {
-                    gain = (request.backlightNits / minOverrideNits);
-                    if (isValidNits(deviceMinimumBacklightNits)) {
-                        gain = Math.max(gain, deviceMinimumBacklightNits / minOverrideNits);
-                    }
-                } else if (minOverrideBacklight > 0.0f) {
-                    gain = request.backlightLevel / minOverrideBacklight;
+                final var raisedNits = resolveNitsAt(minOverrideBacklight);
+                if (isValidNits(raisedNits)) {
+                    overrideBacklight = minOverrideBacklight;
+                    overrideNits = raisedNits;
+                    gain = 1.0f - (1.0f - request.backlightLevel / minOverrideBacklight)
+                            * (1.0f - pref.minimumGain);
+                } else {
+                    Log.d(TAG, String.format(Locale.ROOT,
+                            "override declined: level=%f, requestNits=%f, raisedNits=%f, samples=%d, topLevel=%f",
+                            request.backlightLevel, request.backlightNits, raisedNits,
+                            calibration.sampleCount(), calibration.topLevel()));
                 }
-                //gain = Math.max(gain, overrideService.minimumGain);
-                //gain = Math.max(gain, 0.05f);
             }
 
             // also override sdr brightness if they don't differ much perceptually
-            if (Math.abs(PerceptualQuantizer.NitsToSignal(request.sdrBacklightNits) - PerceptualQuantizer.NitsToSignal(request.backlightNits)) < 1.0/512.0) {
+            if (sdrMatchesHdr) {
                 overrideSdrBacklight = overrideBacklight;
                 overrideSdrNits = overrideNits;
             }
@@ -263,8 +273,28 @@ public class BacklightOverrideService {
         return result;
     }
 
+    /* 亮度换算 */
+    private float resolveNitsAt(float backlight) {
+        var config = displayDeviceConfig;
+        if (config != null) {
+            var value = config.getNitsFromBacklight(backlight);
+            if (isValidNits(value)) return value;
+        }
+        return calibration.nitsAt(backlight);
+    }
+
     private static boolean isValidNits(float value) {
         return Float.isFinite(value) && value > 0.0f;
+    }
+
+    /* 同域判定 */
+    private static boolean isSdrEqualToHdr(BacklightRequest request) {
+        if (request.sdrBacklightLevel != request.backlightLevel) return false;
+        if (isValidNits(request.sdrBacklightNits) && isValidNits(request.backlightNits)) {
+            return Math.abs(PerceptualQuantizer.NitsToSignal(request.sdrBacklightNits)
+                    - PerceptualQuantizer.NitsToSignal(request.backlightNits)) < 1.0 / 512.0;
+        }
+        return true;
     }
 
     public void setTransformGain(float gain) {

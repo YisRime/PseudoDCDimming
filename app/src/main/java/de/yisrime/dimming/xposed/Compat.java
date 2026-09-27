@@ -41,6 +41,29 @@ final class Compat {
         }
     }
 
+    /* 形似匹配 */
+    static Constructor<?> findConstructorWith(Class<?> clazz, Class<?>... required) {
+        Constructor<?> found = null;
+        for (var ctor : clazz.getDeclaredConstructors()) {
+            if (!acceptsTypes(ctor.getParameterTypes(), required)) continue;
+            if (found != null) {
+                throw new NoSuchMethodError(clazz.getName() + "<init> 形似匹配不唯一");
+            }
+            found = ctor;
+        }
+        if (found == null) {
+            throw new NoSuchMethodError(clazz.getName() + "<init>");
+        }
+        return found;
+    }
+
+    static Object argOfType(Class<?> type, Object... args) {
+        for (var arg : args) {
+            if (arg != null && type.isInstance(arg)) return arg;
+        }
+        return null;
+    }
+
     static Object callStatic(Class<?> clazz, String name, Object... args) {
         return invoke(findBestMatch(clazz, name, args), null, args);
     }
@@ -86,6 +109,21 @@ final class Compat {
         throw new NoSuchMethodError(clazz.getName() + "." + name);
     }
 
+    private static boolean acceptsTypes(Class<?>[] actual, Class<?>[] required) {
+        var used = new boolean[actual.length];
+        for (var want : required) {
+            var matched = false;
+            for (int i = 0; i < actual.length; i++) {
+                if (used[i] || !actual[i].isAssignableFrom(want)) continue;
+                used[i] = true;
+                matched = true;
+                break;
+            }
+            if (!matched) return false;
+        }
+        return true;
+    }
+
     private static boolean parameterCountMatches(Method method, Object[] args) {
         var types = method.getParameterTypes();
         if (types.length != args.length) return false;
@@ -108,7 +146,7 @@ final class Compat {
         return Double.class;
     }
 
-    private static Object invoke(Method method, Object receiver, Object[] args) {
+    static Object invoke(Method method, Object receiver, Object[] args) {
         method.setAccessible(true);
         try {
             return method.invoke(receiver, args);

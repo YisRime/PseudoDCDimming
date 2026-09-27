@@ -15,6 +15,7 @@ import android.preference.PreferenceFragment;
 import android.preference.SwitchPreference;
 import android.util.Log;
 import android.widget.TextView;
+import android.widget.Toast;
 
 
 import java.util.Locale;
@@ -37,12 +38,14 @@ public class SettingsActivity extends Activity {
     private BacklightRequest overrideBacklight;
     private float gain;
     private volatile boolean statusPending = false;
+    private final Runnable preferencesChanged = () -> uiHandler.post(this::refreshPreferences);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.settings_activity);
 
+        App.setStateListener(preferencesChanged);
         service = ServiceDiscovery.getService();
         xsp = App.remotePreferences;
         fragment = new SettingsFragment();
@@ -59,6 +62,14 @@ public class SettingsActivity extends Activity {
                 statusPending = true;
             }
         };
+        checkErrors();
+        syncPersistentPreference();
+    }
+
+    /* 绑定回补 */
+    private void refreshPreferences() {
+        if (isDestroyed()) return;
+        xsp = App.remotePreferences;
         checkErrors();
         syncPersistentPreference();
     }
@@ -102,6 +113,7 @@ public class SettingsActivity extends Activity {
         }
         boolean dirty = xsp.getBoolean("enabled", false) != pref.enabled;
         dirty = dirty || xsp.getFloat("minimum_brightness", 0.0f) != pref.minimumOverrideBacklightLevel;
+        dirty = dirty || xsp.getFloat(ServiceDiscovery.KEY_MINIMUM_GAIN, -1.0f) != pref.minimumGain;
         dirty = dirty || xsp.getBoolean("gain_applied_twice", false) != pref.duplicateApplicationWorkaround;
 
         if (dirty) {
@@ -114,6 +126,7 @@ public class SettingsActivity extends Activity {
         xsp.edit()
                 .putBoolean("enabled", pref.enabled)
                 .putFloat("minimum_brightness", pref.minimumOverrideBacklightLevel)
+                .putFloat(ServiceDiscovery.KEY_MINIMUM_GAIN, pref.minimumGain)
                 .putBoolean("gain_applied_twice", pref.duplicateApplicationWorkaround)
                 .apply();
     }
@@ -139,6 +152,12 @@ public class SettingsActivity extends Activity {
     }
 
     @Override
+    protected void onDestroy() {
+        App.setStateListener(null);
+        super.onDestroy();
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
         if (service != null) {
@@ -155,6 +174,7 @@ public class SettingsActivity extends Activity {
         private IBacklightOverrideService service;
         private SwitchPreference enablePref;
         private EditTextPreference minimumBrightnessPref;
+        private EditTextPreference minimumGainPref;
         private CheckBoxPreference gainAppliedTwicePref;
 
         private Preference requestBacklightPref;
@@ -204,6 +224,27 @@ public class SettingsActivity extends Activity {
                 });
             }
 
+            minimumGainPref = (EditTextPreference) findPreference("minimum_gain");
+            if (minimumGainPref != null) {
+                minimumGainPref.setOnPreferenceChangeListener((p, v) -> {
+                    try {
+                        final var fvalue = Float.parseFloat((String) v) / 100.0f;
+                        if (!(fvalue >= 0.0f && fvalue <= 1.0f)) {
+                            Toast.makeText(getActivity(), R.string.minimum_gain_invalid, Toast.LENGTH_SHORT).show();
+                            return false;
+                        }
+                        final var pref = service.getPreference();
+                        pref.minimumGain = fvalue;
+                        service.putPreference(pref);
+                        updateMinimumGainPreference(fvalue);
+                        activity.writePersistentPreference(pref);
+                        return true;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
+            }
+
             gainAppliedTwicePref = (CheckBoxPreference) findPreference("gain_applied_twice");
             if (gainAppliedTwicePref != null) {
                 gainAppliedTwicePref.setOnPreferenceChangeListener((p, v) -> {
@@ -241,6 +282,7 @@ public class SettingsActivity extends Activity {
                     var pref = service.getPreference();
                     enablePref.setChecked(pref.enabled);
                     updateMinimumBrightnessPreference(pref.minimumOverrideBacklightLevel);
+                    updateMinimumGainPreference(pref.minimumGain);
                     gainAppliedTwicePref.setChecked(pref.duplicateApplicationWorkaround);
                 } catch (Exception e) {
                     // ignore
@@ -271,6 +313,12 @@ public class SettingsActivity extends Activity {
             var s2 = String.format(Locale.ROOT, "%.2f", newValue * 100);
             minimumBrightnessPref.setText(s2);
             minimumBrightnessPref.setSummary(s2 + "%");
+        }
+
+        private void updateMinimumGainPreference(float newValue) {
+            var s2 = String.format(Locale.ROOT, "%.2f", newValue * 100);
+            minimumGainPref.setText(s2);
+            minimumGainPref.setSummary(s2 + "%");
         }
 
     }

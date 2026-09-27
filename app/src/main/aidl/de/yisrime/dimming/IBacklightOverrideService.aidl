@@ -5,7 +5,7 @@ import de.yisrime.dimming.IBacklightOverrideStateListener;
 import de.yisrime.dimming.BacklightOverridePreference;
 
 interface IBacklightOverrideService {
-    const int VERSION = 3;
+    const int VERSION = 4;
     BacklightOverridePreference getPreference();
     void putPreference(in BacklightOverridePreference pref);
 
